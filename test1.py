@@ -24,6 +24,7 @@ class SubwayExplorer(QMainWindow):
         
         # station tree nav
         self.tree_view = QTreeView()
+        self.tree_view.setIndentation(10)
         self.tree_view.setModel(self.model)
         self.splitter.addWidget(self.tree_view)
 
