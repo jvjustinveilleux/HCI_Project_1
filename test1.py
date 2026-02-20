@@ -53,7 +53,7 @@ class SubwayExplorer(QMainWindow):
         self.button_row = QHBoxLayout()
         self.btn_new_station = QPushButton("New Station")
         self.btn_new_train = QPushButton("New Train")
-        self.btn_delete = QPushButton("Delete")
+        self.btn_delete = QPushButton("Decomission")
         self.btn_delete.setEnabled(False) #grayed out unless clicked
 
         self.button_row.addWidget(self.btn_new_station)
