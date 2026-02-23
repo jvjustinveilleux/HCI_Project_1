@@ -1,9 +1,9 @@
 import sys
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QTreeView, QPushButton, QSplitter,
-                             QListView, QLabel, QFrame, QHeaderView) # Added QHeaderView
+                             QListView, QLabel, QFrame, QHeaderView, QSpacerItem, QSizePolicy) # Added QHeaderView
 from PySide6.QtGui import QStandardItemModel, QStandardItem
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSize
 
 class SubwayExplorer(QMainWindow):
     def __init__(self):
@@ -45,7 +45,8 @@ class SubwayExplorer(QMainWindow):
         self.content_view = QListView()
         self.content_view.setModel(self.model)
         self.content_view.setViewMode(QListView.IconMode) 
-        self.content_view.setSpacing(20)
+        self.content_view.setSpacing(100)
+        self.content_view.setGridSize(QSize(125, 125)) # adjusted the grid size of each content
         self.content_view.setResizeMode(QListView.Adjust)
         
         self.right_layout.addWidget(self.station_label)
@@ -71,6 +72,7 @@ class SubwayExplorer(QMainWindow):
         
         self.setup_default_network()
         self.setup_connections()
+
 
     def setup_default_network(self):
         #stations 0-5, 3 trains in each one
