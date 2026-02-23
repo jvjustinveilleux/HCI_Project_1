@@ -1,7 +1,7 @@
 import sys
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QTreeView, QPushButton, QSplitter,
-                             QListView, QLabel, QFrame)
+                             QListView, QLabel, QFrame, QHeaderView) # Added QHeaderView
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtCore import Qt
 
@@ -24,8 +24,14 @@ class SubwayExplorer(QMainWindow):
         
         # station tree nav
         self.tree_view = QTreeView()
-        self.tree_view.setIndentation(10)
+        self.tree_view.setIndentation(20) # Increased slightly for better visual nesting
         self.tree_view.setModel(self.model)
+        
+        # netter horizontal scrolling
+        self.tree_view.header().setStretchLastSection(False)
+        self.tree_view.header().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.tree_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        
         self.splitter.addWidget(self.tree_view)
 
         # station contents
@@ -40,6 +46,7 @@ class SubwayExplorer(QMainWindow):
         self.content_view.setModel(self.model)
         self.content_view.setViewMode(QListView.IconMode) 
         self.content_view.setSpacing(20)
+        self.content_view.setResizeMode(QListView.Adjust)
         
         self.right_layout.addWidget(self.station_label)
         self.right_layout.addWidget(self.content_view)
