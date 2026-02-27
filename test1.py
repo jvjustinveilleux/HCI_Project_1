@@ -6,6 +6,9 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtCore import Qt, QSize
 
+from PySide6.QtGui import QIcon, QStandardItem
+from PySide6.QtCore import Qt
+
 class SubwayExplorer(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -84,15 +87,20 @@ class SubwayExplorer(QMainWindow):
 
     def setup_default_network(self):
         #stations 0-5, 3 trains in each one
+        station_icon = QIcon("train_station_image.png")  # your station image
+        train_icon = QIcon("train_image.png")      # your train image
+
         parent = self.model.invisibleRootItem()
         for i in range(6):
             station = QStandardItem(f"Station {i}")
             station.setData("station", Qt.UserRole)
+            station.setIcon(station_icon)  # <-- add icon
             parent.appendRow(station)
             
             for j in range(1, 4):
                 train = QStandardItem(f"Train {i}-{j}")
                 train.setData("train", Qt.UserRole)
+                train.setIcon(train_icon)  # <-- add icon
                 station.appendRow(train)
             
             parent = station#nesting
