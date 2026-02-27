@@ -1,78 +1,80 @@
 import sys
+import os
+import platform
+import subprocess
+import shutil
+from pathlib import Path
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QTreeView, QPushButton, QSplitter,
-                             QListView, QLabel, QFrame, QHeaderView, QSpacerItem, 
-                             QSizePolicy, QMessageBox, QInputDialog) # Added QMessageBox and QInputDialog
-from PySide6.QtGui import QStandardItemModel, QStandardItem
+                             QListView, QLabel, QHeaderView, QMessageBox, QInputDialog)
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QIcon
 from PySide6.QtCore import Qt, QSize
-
-from PySide6.QtGui import QIcon, QStandardItem
-from PySide6.QtCore import Qt
 
 class SubwayExplorer(QMainWindow):
     def __init__(self):
         super().__init__()
 
         self.setWindowTitle("Subway Systems Explorer")
-        self.resize(900, 600)
+        self.resize(1000, 700)
+
+        
+        self.root_path = Path.cwd() / "example_filesystem"
+        if not self.root_path.exists():
+            self.root_path.mkdir(parents=True, exist_ok=True)
 
         self.model = QStandardItemModel()
         self.model.setHorizontalHeaderLabels(["Transit Network"])
 
+        self.setup_ui()
+        self.load_file_system(self.root_path)
+        self.setup_connections()
+
+    def setup_ui(self):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.main_layout = QVBoxLayout(self.central_widget)
 
-        
         self.splitter = QSplitter(Qt.Horizontal)
         
-        # station tree nav
+        # Left: Station tree (Navigation Only)
         self.tree_view = QTreeView()
-        self.tree_view.setIndentation(20) # Increased slightly for better visual nesting
         self.tree_view.setModel(self.model)
-        
-        #better horizontal scrolling
-        self.tree_view.header().setStretchLastSection(False)
         self.tree_view.header().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.tree_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        
         self.tree_view.setEditTriggers(QTreeView.NoEditTriggers)
-
         self.splitter.addWidget(self.tree_view)
 
-        # station contents
+        # Right: Station contents (Action Zone)
         self.right_container = QWidget()
         self.right_layout = QVBoxLayout(self.right_container)
         
-        self.station_label = QLabel("Station: 0")
-        self.station_label.setStyleSheet("font-size: 18px; font-weight: bold; padding: 10px;")
-        self.station_label.setAlignment(Qt.AlignCenter)
+        self.station_label = QLabel(f"Hub: {self.root_path.name}")
+        self.station_label.setStyleSheet("font-size: 16px; font-weight: bold; padding: 5px; color: #2c3e50;")
         
         self.content_view = QListView()
         self.content_view.setModel(self.model)
         self.content_view.setViewMode(QListView.IconMode) 
-        self.content_view.setSpacing(100)
-        self.content_view.setGridSize(QSize(125, 125)) # adjusted the grid size of each content
+        self.content_view.setSpacing(20)
+        self.content_view.setGridSize(QSize(130, 130))
         self.content_view.setResizeMode(QListView.Adjust)
-        
         self.content_view.setEditTriggers(QListView.NoEditTriggers)
 
         self.right_layout.addWidget(self.station_label)
         self.right_layout.addWidget(self.content_view)
         self.splitter.addWidget(self.right_container)
         
-        
-        self.splitter.setSizes([270, 630])
+        self.splitter.setSizes([300, 700])
         self.main_layout.addWidget(self.splitter)
 
-        # bottom buttons
+        # Bottom buttons
         self.button_row = QHBoxLayout()
         self.btn_new_station = QPushButton("New Station")
         self.btn_new_train = QPushButton("New Train")
         self.btn_rename = QPushButton("Rename") 
+        self.btn_delete = QPushButton("Decommission")
+        
+        
         self.btn_rename.setEnabled(False)
-        self.btn_delete = QPushButton("Decomission")
-        self.btn_delete.setEnabled(False) #grayed out unless clicked
+        self.btn_delete.setEnabled(False)
 
         self.button_row.addWidget(self.btn_new_station)
         self.button_row.addWidget(self.btn_new_train)
@@ -80,114 +82,154 @@ class SubwayExplorer(QMainWindow):
         self.button_row.addWidget(self.btn_delete)
         self.main_layout.addLayout(self.button_row)
 
-        
-        self.setup_default_network()
-        self.setup_connections()
-
-
-    def setup_default_network(self):
-        #stations 0-5, 3 trains in each one
-        station_icon = QIcon("train_station_image.png")  # your station image
-        train_icon = QIcon("train_image.png")      # your train image
-
-        parent = self.model.invisibleRootItem()
-        for i in range(6):
-            station = QStandardItem(f"Station {i}")
-            station.setData("station", Qt.UserRole)
-            station.setIcon(station_icon)  # <-- add icon
-            parent.appendRow(station)
-            
-            for j in range(1, 4):
-                train = QStandardItem(f"Train {i}-{j}")
-                train.setData("train", Qt.UserRole)
-                train.setIcon(train_icon)  # <-- add icon
-                station.appendRow(train)
-            
-            parent = station#nesting
-        
+    def load_file_system(self, root_path):
+        self.model.clear()
+        self.model.setHorizontalHeaderLabels(["Transit Network"])
+        root_item = self.model.invisibleRootItem()
+        self.populate_branch(root_path, root_item)
         self.tree_view.expandAll()
-        #opens station 0
         self.content_view.setRootIndex(self.model.index(0, 0))
 
-    def setup_connections(self):
-        #what is clicked on the left, is shown on the right
-        self.tree_view.clicked.connect(self.sync_views)
-        self.content_view.clicked.connect(self.enable_delete)
+    def populate_branch(self, path, parent_item):
+        try:
+            entries = sorted(os.scandir(path), key=lambda e: (not e.is_dir(), e.name.lower()))
+            for entry in entries:
+                if entry.name.startswith('.') or entry.name == ".DS_Store":
+                    continue
+                
+                item = QStandardItem(entry.name)
+                item.setData(entry.path, Qt.UserRole + 1)
+                
+                if entry.is_dir():
+                    item.setData("station", Qt.UserRole)
+                    item.setIcon(QIcon("train_station_image.png"))
+                    parent_item.appendRow(item)
+                    self.populate_branch(entry.path, item)
+                else:
+                    item.setData("train", Qt.UserRole)
+                    item.setIcon(QIcon("train_image.png"))
+                    parent_item.appendRow(item)
+        except PermissionError:
+            pass
 
-        #new event to see if trains are double clicked
-        self.tree_view.doubleClicked.connect(self.show_welcome_message)
-        self.content_view.doubleClicked.connect(self.show_welcome_message)
+    def setup_connections(self):
+        self.tree_view.clicked.connect(self.navigate_hub)
         
-        #buttons
+        self.content_view.clicked.connect(self.enable_actions)
+        
+        #to open station/train 
+        self.tree_view.doubleClicked.connect(self.board_train)
+        self.content_view.doubleClicked.connect(self.board_train)
+        
+        # Button Actions
         self.btn_new_station.clicked.connect(self.add_station)
         self.btn_new_train.clicked.connect(self.add_train)
         self.btn_rename.clicked.connect(self.rename_item)
         self.btn_delete.clicked.connect(self.delete_item)
 
-    def show_welcome_message(self, index):
-        item = self.model.itemFromIndex(index)
-        if item.data(Qt.UserRole) == "train":
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Inside Train")
-            msg.setText(f"All Aboard {item.text()}!")
-            msg.setIcon(QMessageBox.Information)
-            msg.exec()
-
-    def sync_views(self, index):
+    def navigate_hub(self, index):
+        # tree nav on left, shows contents on right
         item = self.model.itemFromIndex(index)
         if item.data(Qt.UserRole) == "station":
             self.content_view.setRootIndex(index)
-            self.station_label.setText(f"Station: \"{item.text()}\"")
-        self.enable_delete()
+            self.station_label.setText(f"Hub: \"{item.text()}\"")
+        
+        self.btn_rename.setEnabled(False)
+        self.btn_delete.setEnabled(False)
 
-    def enable_delete(self):
-        self.btn_delete.setEnabled(True)
+    def enable_actions(self, index):
+        # for last 2 buttons
         self.btn_rename.setEnabled(True)
+        self.btn_delete.setEnabled(True)
 
-    def rename_item(self):
-        index = self.content_view.currentIndex() if self.content_view.hasFocus() else self.tree_view.currentIndex()
-        if index.isValid():
-            item = self.model.itemFromIndex(index)
-            
-            #do not rename station 0
-            if item.text() == "Station 0":
-                QMessageBox.warning(self, "Protected", "Station 0 cannot be renamed.")
-                return
-
-            new_name, ok = QInputDialog.getText(self, "Rename", "New name:", text=item.text())
-            if ok and new_name:
-                item.setText(new_name)
-                #label updater
-                if self.content_view.rootIndex() == index:
-                    self.station_label.setText(f"Station: \"{new_name}\"")
+    def board_train(self, index):
+        path = self.model.itemFromIndex(index).data(Qt.UserRole + 1)
+        if os.path.isfile(path):
+            if platform.system() == "Windows":
+                os.startfile(path)
+            elif platform.system() == "Darwin":
+                subprocess.call(["open", path])
+            else:
+                subprocess.call(["xdg-open", path])
+        else:
+            self.content_view.setRootIndex(index)
+            self.station_label.setText(f"Hub: \"{os.path.basename(path)}\"")
+            #re-gray buttons out because inside new station
+            self.btn_rename.setEnabled(False)
+            self.btn_delete.setEnabled(False)
 
     def add_station(self):
-        parent_index = self.content_view.rootIndex()
-        parent_item = self.model.itemFromIndex(parent_index) or self.model.invisibleRootItem()
-        new_station = QStandardItem("New Station")
-        new_station.setData("station", Qt.UserRole)
-        parent_item.appendRow(new_station)
+        parent_idx = self.content_view.rootIndex()
+        parent_path = Path(self.model.itemFromIndex(parent_idx).data(Qt.UserRole + 1)) if parent_idx.isValid() else self.root_path
+        parent_item = self.model.itemFromIndex(parent_idx) or self.model.invisibleRootItem()
+
+        name, ok = QInputDialog.getText(self, "New Station", "Enter Station Name:")
+        if ok and name:
+            new_path = parent_path / name
+            try:
+                new_path.mkdir()
+                item = QStandardItem(name)
+                item.setData("station", Qt.UserRole)
+                item.setData(str(new_path), Qt.UserRole + 1)
+                item.setIcon(QIcon("train_station_image.png"))
+                parent_item.appendRow(item)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed: {e}")
 
     def add_train(self):
-        parent_index = self.content_view.rootIndex()
-        parent_item = self.model.itemFromIndex(parent_index) or self.model.invisibleRootItem()
-        new_train = QStandardItem("New Train")
-        new_train.setData("train", Qt.UserRole)
-        parent_item.appendRow(new_train)
+        parent_idx = self.content_view.rootIndex()
+        parent_path = Path(self.model.itemFromIndex(parent_idx).data(Qt.UserRole + 1)) if parent_idx.isValid() else self.root_path
+        parent_item = self.model.itemFromIndex(parent_idx) or self.model.invisibleRootItem()
+
+        name, ok = QInputDialog.getText(self, "New Train", "Enter Train Name:")
+        if ok and name:
+            new_path = parent_path / name
+            try:
+                new_path.touch()
+                item = QStandardItem(name)
+                item.setData("train", Qt.UserRole)
+                item.setData(str(new_path), Qt.UserRole + 1)
+                item.setIcon(QIcon("train_image.png"))
+                parent_item.appendRow(item)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed: {e}")
+
+    def rename_item(self):
+        index = self.content_view.currentIndex()
+        if not index.isValid(): return
+        
+        item = self.model.itemFromIndex(index)
+        old_path = Path(item.data(Qt.UserRole + 1))
+        
+        new_name, ok = QInputDialog.getText(self, "Rename", f"Rename '{item.text()}' to:", text=item.text())
+        if ok and new_name:
+            new_path = old_path.parent / new_name
+            try:
+                os.rename(old_path, new_path)
+                item.setText(new_name)
+                item.setData(str(new_path), Qt.UserRole + 1)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Rename failed: {e}")
 
     def delete_item(self):
-        #is item clicked
-        index = self.content_view.currentIndex() if self.content_view.hasFocus() else self.tree_view.currentIndex()
-        if index.isValid():
-            item = self.model.itemFromIndex(index)
-            #do not dlete station 0
-            if item.text() == "Station 0":
-                QMessageBox.warning(self, "Protected", "Station 0 cannot be decommissioned.")
-                return
-            
-            self.model.removeRow(index.row(), index.parent())
-            self.btn_delete.setEnabled(False)
-            self.btn_rename.setEnabled(False)
+        index = self.content_view.currentIndex()
+        if not index.isValid(): return
+        
+        item = self.model.itemFromIndex(index)
+        path = Path(item.data(Qt.UserRole + 1))
+        
+        confirm = QMessageBox.question(self, "Decommission", f"Send {item.text()} to the scrap heap?")
+        if confirm == QMessageBox.Yes:
+            try:
+                if path.is_dir():
+                    shutil.rmtree(path)
+                else:
+                    path.unlink()
+                self.model.removeRow(index.row(), index.parent())
+                self.btn_rename.setEnabled(False)
+                self.btn_delete.setEnabled(False)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed: {e}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
